@@ -11,14 +11,48 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
+char * initiatePath(char *path){
+    char *defaultPath = "/bin/";
+
+    //allocate memory
+    path = malloc(sizeof(*path) * strlen(defaultPath));
+    if (path == NULL){
+        perror("malloc failed!");
+    }
+
+    strcpy(path, defaultPath);
+    printf("%s\n",path);
+    return path;
+}
+
+char * updatePath(char *path, char *addition){
+    char *newPath;
+    size_t newSize = strlen(path) + strlen(addition) + 2;
+    printf("in update function, next reallocation\n");
+    //memory reallocation
+    newPath = realloc(path, newSize);
+    if (newPath == NULL){
+        perror("realloc failed!");
+    }
+    printf("reallocation is done\n");
+    newPath = strncat(newPath,":",2);
+    newPath = strncat(newPath,addition,strlen(addition));
+    printf("%s\n",newPath);
+
+    return newPath;
+}
 
 int main(){
     char *line = NULL;
     char *token = NULL;
     char *parameter = NULL;
+    char *path = NULL;
     size_t len = 0;
-    //__ssize_t read;    
+    //__ssize_t read;
 
+    //initiate path    
+    path = initiatePath(path);
+    printf("%s\n",path);
     while (1){
         
         printf("shell>>");
@@ -42,22 +76,26 @@ int main(){
             printf("built-in cd\n");
             if (chdir(parameter) != 0){
                 perror("cd failed!");
-                exit(1);
             };
             continue;
         }
 
         if (strcmp("path", token) == 0){
             printf("built-in path\n");
-            if (chdir(parameter) != 0){
-                perror("path failed!");
-                exit(1);
-            };
+
+            if (parameter != NULL) {
+                path = updatePath(path, parameter);
+            } else {
+                printf("No parameter provided for path update\n");
+            }
+            //path = updatePath(path, parameter);
             continue;
         }
 
 
         if (strcmp("exit", token) == 0){
+            free(path);
+            path = NULL;
             exit(0);
         } else {
             pid_t pid = fork();
@@ -88,12 +126,15 @@ TODO:
     o exit
     o cd
     - path
-- redirection
+- redirection (>)
 - paths
 - parallel commands (&)
 
 - change if-else structure for switch case
 
-should i be editing path at ~/.bashrc
+should i have pipe | ?
+should i be editing file ~/.bashrc?
 
+
+To parse the input line into constituent pieces, you might want to use strsep()
 */
