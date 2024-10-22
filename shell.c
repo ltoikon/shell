@@ -11,21 +11,109 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-char * initiatePath(char *path){
-    char *defaultPath = "/bin/";
+/*Linked list used for saving paths*/
+typedef struct List {
+    char *textData;
+    struct List* pNext;
+} List;
 
-    //allocate memory
-    path = malloc(sizeof(*path) * strlen(defaultPath));
-    if (path == NULL){
-        perror("malloc failed!");
+List * additionList(char *textLine, List *pRoot){
+    List *ptr, *pNewNode;
+    char *pLine = NULL;
+
+    //Memory allocation for linked list node
+    if ((pNewNode = (List*)malloc(sizeof(List))) == NULL){
+        fprintf(stderr, "malloc failed\n");
+        exit(1);
+    }
+    
+    //Memory allocation for the line of text
+    if ((pLine = (char*)malloc(strlen(textLine)+1)) == NULL){
+        fprintf(stderr, "malloc failed\n");
+        exit(1);
     }
 
-    strcpy(path, defaultPath);
-    printf("%s\n",path);
-    return path;
+    //Values for new List
+    if (textLine == NULL){
+        strcpy(textLine, "empty, lineread error");
+    }
+    strcpy(pLine, textLine);
+
+    pNewNode->textData = pLine;
+    pNewNode->pNext = NULL;
+
+    //Add new list node to linked list structure
+    //Initialize linked list if empty
+    if (pRoot == NULL){
+        pRoot = pNewNode;
+    }
+
+    //Linked list existing already
+    else {
+        ptr = pRoot;
+        int i=0;
+        while (ptr->pNext != NULL){
+            ptr = ptr->pNext;
+            i++;
+        }
+        ptr->pNext = pNewNode;
+    }
+    return pRoot;
 }
 
-char * updatePath(char *path, char *addition){
+List * removeList(List *pRoot){
+    List *ptr = pRoot;
+    //Delete linked list node by node
+    while (ptr != NULL){
+        pRoot = ptr->pNext;
+        free(ptr->textData);
+        free(ptr);
+        ptr = pRoot;
+    }
+    return pRoot;
+};
+
+int writeList(List *pRoot, char *filename){
+    List *ptr = pRoot;
+
+    if (strcmp("stdout", filename) != 0){
+        FILE *pFile;
+        if ((pFile = fopen(filename, "w")) == NULL){
+            fprintf(stderr, "error: cannot open file '%s'\n", filename);
+            exit(1);
+        }
+        while (ptr != NULL){
+            fprintf(pFile, "%s", ptr->textData);
+            ptr = ptr->pNext;
+        }
+        fclose(pFile);
+    }
+    else {
+        //printf("Output:\n");
+        while (ptr != NULL){
+        fprintf(stdout, "%s", ptr->textData);
+        ptr = ptr->pNext;
+        }
+    }
+    return 0;
+}
+
+
+
+List * initiatePath(List *pPath){
+    char *defaultPath = "/bin";
+    pPath = additionList(defaultPath, pPath);
+
+    return pPath;
+
+
+}
+/*TODO: 
+ - new path replaces old paths, so need to edit this
+ - should i changes how path is saved to array*/
+
+List * updatePath(List *pPath, char *addition){
+    /*
     char *newPath;
     size_t newSize = strlen(path) + strlen(addition) + 2;
     printf("in update function, next reallocation\n");
@@ -40,19 +128,27 @@ char * updatePath(char *path, char *addition){
     printf("%s\n",newPath);
 
     return newPath;
+    */
+    // remove old path
+    
+    removeList(pPath);
+
+
+    return pPath;
 }
 
 int main(){
     char *line = NULL;
     char *token = NULL;
     char *parameter = NULL;
-    char *path = NULL;
+    List *pPath = NULL;
+    //int argumentsCount = NULL;
     size_t len = 0;
     //__ssize_t read;
 
     //initiate path    
-    path = initiatePath(path);
-    printf("%s\n",path);
+    pPath = initiatePath(pPath);
+    //printf("%s\n",path);
     while (1){
         
         printf("shell>>");
@@ -84,7 +180,7 @@ int main(){
             printf("built-in path\n");
 
             if (parameter != NULL) {
-                path = updatePath(path, parameter);
+                updatePath(path, parameter);
             } else {
                 printf("No parameter provided for path update\n");
             }
@@ -95,7 +191,7 @@ int main(){
 
         if (strcmp("exit", token) == 0){
             free(path);
-            path = NULL;
+            //path[] = NULL; //How to make sure that path pointer is made to 
             exit(0);
         } else {
             pid_t pid = fork();
