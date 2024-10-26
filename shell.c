@@ -119,23 +119,64 @@ int changeDirectory(char * parameter){
     return 0;
 }
 
-int execution(char * command, char * argument, List *pPath){
+int execution(char *command, char *parameter, List *pPath){
+    List *ptr;
+    char fullpath[1000] = {0};
+    char *buffer = NULL;
+    char *arguments[10]; //remove fixed size, overflow possible
+    int i = 1;
+ 
+    //split arguments
+    arguments[0]=command;
+    if (parameter != NULL){
+        buffer = strtok(parameter, " ");
+    }
+
+    while (buffer != NULL){
+        arguments[i] = buffer;
+        buffer = strtok(NULL, " ");
+        i++;
+    }
+    arguments[i] = NULL;
 
     //TODO
         // käy läpi jokainen path etsien accessilla commandia
         // kun löytyy aja command
         // jos ei löydy pathista ei ajoa
     pid_t pid = fork();
+    ptr = pPath;
+
     if (pid < 0){
         perror("Fork failed!");
         exit(1);
     }
+
     if (pid == 0){
-        char *args[]={command, argument, NULL};
-        execvp(args[0],args);
+        while(ptr != NULL){
+            strcat(fullpath, ptr->textData);
+            strcat(fullpath, "/");
+            strcat(fullpath, command);
+            //printf("TEST command and path is: %s\n", fullpath);
+            if (access(fullpath, X_OK) == 0){
+                execv(fullpath,arguments);
+            }
+            //clear fullpath string for a next path at the list
+            memset(fullpath,0,sizeof(fullpath)); //static
+            //memset(fullpath,0,strlen(fullpath)); //dynamic
+
+            // found on https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string
+
+            ptr = ptr->pNext;
+        }
+        //exit from child process if no executable found
+        printf("No executable found\n");
+        exit(1);
     } else {
         wait(NULL);
     }
+    
+    
+
     return 0;
 }
 
@@ -153,11 +194,11 @@ int main(){
     while (1){
         
         printf("shell>>");
-        getline(&line, &len, stdin);
+        getline(&line, &len, stdin); //line not any point freed, does it leak memory?
         token = strtok(line, " ");
         parameter = strtok(NULL, "\n");
         //parameter = strtok(parameter, "\n"); //remove line break from parameter
-        printf("command is %s, and given parameter if given: %s\n", token, parameter);
+        //printf("command is %s, and given parameter if given: %s\n", token, parameter);
 
         /*remove linebreak only if string is not empty*/
         if (strcmp("\n", token) != 0){
@@ -176,9 +217,7 @@ int main(){
 
         if (strcmp("path", token) == 0){
             //printf("built-in path\n");
-
             pPath = updatePath(pPath, parameter);
-
             printList(pPath);
             continue;
         }
@@ -189,12 +228,18 @@ int main(){
             //path[] = NULL; //How to make sure that path pointer is made to 
             exit(0);
         } else {
-            execution(token, parameter, pPath);
+            //printf("outside executioner\n");
+            //printf("token: %s, parameter: %s, first path on list: %s \n",token, parameter, pPath->textData);
             
+            //
+            if (pPath != NULL && strcmp(pPath->textData, "") != 0){
+                execution(token, parameter, pPath);
+            
+            } else {
+                printf("No paths given\n");
+            }
         }
-        
     }
-
 
     return 0;
 }
@@ -203,20 +248,31 @@ int main(){
 exec() -
 wait() -
 
-TODO:
-- built-in commands 
+DONE:
+ built-in commands 
     o exit
     o cd
-    - path
-- redirection (>)
-- paths
-- parallel commands (&)
+    o path
 
+TODO:
+- redirection (>)
+- parallel commands (&)
+- batch file handling
+
+POSSIBLE CHANGES:
+- change linked list for dynamic list, does it matter? which one is better?
+    -use realloc for dynamic list when it grows
+    -earlier implementation used it, did change for linked list
 - change if-else structure for switch case
 
+EXTRA:
+- command history would be cool
+    -readline
+
 should i have pipe | ?
-should i be editing file ~/.bashrc?
 
 
 To parse the input line into constituent pieces, you might want to use strsep()
+another function could be strtok_r, not sure is it better
+-strtok is thread safe https://www.geeksforgeeks.org/strtok-strtok_r-functions-c-examples/
 */
