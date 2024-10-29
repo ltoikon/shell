@@ -1,7 +1,7 @@
 /*Shell*/
 /*Lauri Ikonen*/
 /*Started 23092024*/
-/*Modified 14102024*/
+/*Modified 29102024*/
 
 /**/
 
@@ -12,6 +12,7 @@
 #include <sys/wait.h>
 
 /*Linked list data structure is used for saving paths*/
+//Can I use same struct for saving parallel commands
 typedef struct List {
     char *textData;
     struct List* pNext;
@@ -121,11 +122,19 @@ int changeDirectory(char * parameter){
 
 int execution(char *command, char *parameter, List *pPath){
     List *ptr;
-    char fullpath[1000] = {0};
+    //char fullpath[1000] = {0};
+    char *fullpath_dynamic = NULL;
     char *buffer = NULL;
-    char *arguments[10]; //remove fixed size, overflow possible
+    //char *buffer_dynamic = NULL;
+
+    /*arguments is fixed size and overflow is possible, 
+    either need to be dynamic 
+    or have a check for out-of-bounds error */
+    char *arguments[10]; 
+    //char *arguments_dynamic;
     int i = 1;
- 
+    
+    //arguments_dynamic = (char*)malloc(sizeof(char)*len(command));
     //split arguments
     arguments[0]=command;
     if (parameter != NULL){
@@ -153,16 +162,20 @@ int execution(char *command, char *parameter, List *pPath){
 
     if (pid == 0){
         while(ptr != NULL){
-            strcat(fullpath, ptr->textData);
-            strcat(fullpath, "/");
-            strcat(fullpath, command);
+            fullpath_dynamic 
+            = malloc(sizeof(char) * (2+strlen(ptr->textData)+strlen(command)));
+            strcat(fullpath_dynamic, ptr->textData);
+            strcat(fullpath_dynamic, "/");
+            strcat(fullpath_dynamic, command);
             //printf("TEST command and path is: %s\n", fullpath);
-            if (access(fullpath, X_OK) == 0){
-                execv(fullpath,arguments);
+            if (access(fullpath_dynamic, X_OK) == 0){
+                execv(fullpath_dynamic,arguments);
             }
             //clear fullpath string for a next path at the list
-            memset(fullpath,0,sizeof(fullpath)); //static
+            //memset(fullpath_dynamic,0,sizeof(fullpath_dynamic)); //static
             //memset(fullpath,0,strlen(fullpath)); //dynamic
+
+            free(fullpath_dynamic);
 
             // found on https://stackoverflow.com/questions/8107826/proper-way-to-empty-a-c-string
 
@@ -194,7 +207,10 @@ int main(){
     while (1){
         
         printf("shell>>");
-        getline(&line, &len, stdin); //line not any point freed, does it leak memory?
+        getline(&line, &len, stdin); //not freed,  does it leak memory?
+        
+        
+
         token = strtok(line, " ");
         parameter = strtok(NULL, "\n");
         //parameter = strtok(parameter, "\n"); //remove line break from parameter
