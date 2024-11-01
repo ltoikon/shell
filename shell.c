@@ -148,11 +148,7 @@ int execution(char *command, char *parameter, List *pPath){
     }
     arguments[i] = NULL;
 
-    //TODO
-        // käy läpi jokainen path etsien accessilla commandia
-        // kun löytyy aja command
-        // jos ei löydy pathista ei ajoa
-    pid_t pid = fork();
+    pid_t pid = fork(); 
     ptr = pPath;
 
     if (pid < 0){
@@ -187,74 +183,115 @@ int execution(char *command, char *parameter, List *pPath){
     } else {
         wait(NULL);
     }
-    
-    
 
     return 0;
 }
 
+
+int processCommands(List * pPath, List * pCommands){
+
+    char *command;
+    char *arguments;
+    pid_t pid;
+    List *ptr = pCommands;
+    
+    //Next these commands should be executed parallel
+    //Splitting parameters is done inside each execute function
+
+    while (ptr != NULL){
+
+        fprintf(stdout, "Executing: ");
+        fprintf(stdout, "%s\n", ptr->textData);
+
+        command = strtok(ptr->textData, " ");
+        arguments = strtok(NULL, "\n");
+
+        /*Check for builtin commands*/
+
+        if (strcmp("exit", command) == 0){
+            pPath = removeList(pPath);
+            pCommands = removeList(pCommands);
+            exit(0);
+
+        } else if (strcmp("vaihto", command) == 0){
+                arguments = strtok(arguments, " \t\n"); //remove whitespace
+                changeDirectory(arguments);
+                
+        } else if (strcmp("path", command) == 0){
+                    pPath = updatePath(pPath, arguments);
+                    printList(pPath);
+        
+        /*Other commands*/            
+        } else {
+            pid = fork(); 
+            if (pid < 0){
+                perror("Fork failed!");
+                exit(1);
+            } else if (pid == 0){
+
+                if (pPath != NULL && strcmp(pPath->textData, "") != 0){
+                    execution(command, arguments, pPath);
+                } else {
+                    printf("No paths given\n");
+                }
+
+                exit(0); //Stopping child process
+            }
+            
+        } 
+        ptr = ptr->pNext;
+    }        
+    
+    /*Wait for child processes before returning
+    https://stackoverflow.com/questions/279729/how-to-wait-until-all-child-processes-called-by-fork-complete*/
+    while (wait(NULL) > 0);
+
+    return 0;
+}
+
+List * parseCommands(char *input, List * pPath, List * pCommands){
+    
+    
+    //List *pCommands = NULL;
+    char *command = NULL;
+
+    //removing linebreak only if string is not empty
+    if (strcmp("\n", input) != 0){
+        input = strtok(input, "\n");
+    }
+
+    command = strtok(input, "&");
+
+    while(command != NULL){
+        pCommands = additionList(command, pCommands);
+        command = strtok(NULL, "&");
+    }
+
+    //TODO: TRIM whitespace https://stackoverflow.com/questions/122616/how-do-i-trim-leading-trailing-whitespace-in-a-standard-way
+
+    //Now every command is on linked list with parameters included
+
+    return pCommands;
+}
+
 int main(){
     char *line = NULL;
-    char *token = NULL;
-    char *parameter = NULL;
     List *pPath = NULL;
+    List *pCommands = NULL;
     size_t len = 0;
-    //__ssize_t read;
 
     //initiate path    
     pPath = initiatePath(pPath);
-    printList(pPath);
+    //printList(pPath);
+
+    //looping interactive input prompt
     while (1){
-        
         printf("shell>>");
         getline(&line, &len, stdin); //not freed,  does it leak memory?
-        
-        
+        pCommands = parseCommands(line, pPath, pCommands);
+        processCommands(pPath, pCommands);
+        pCommands = removeList(pCommands); //remove executed commands
 
-        token = strtok(line, " ");
-        parameter = strtok(NULL, "\n");
-        //parameter = strtok(parameter, "\n"); //remove line break from parameter
-        //printf("command is %s, and given parameter if given: %s\n", token, parameter);
-
-        /*remove linebreak only if string is not empty*/
-        if (strcmp("\n", token) != 0){
-            token = strtok(token, "\n");
-        }
-
-        //no extra forks if no command 
-        if (strcmp("\n", token) == 0){
-            continue;
-        }
-
-        if (strcmp("vaihto", token) == 0){
-            changeDirectory(parameter);
-            continue;
-        }
-
-        if (strcmp("path", token) == 0){
-            //printf("built-in path\n");
-            pPath = updatePath(pPath, parameter);
-            printList(pPath);
-            continue;
-        }
-
-
-        if (strcmp("exit", token) == 0){
-            pPath = removeList(pPath);
-            //path[] = NULL; //How to make sure that path pointer is made to 
-            exit(0);
-        } else {
-            //printf("outside executioner\n");
-            //printf("token: %s, parameter: %s, first path on list: %s \n",token, parameter, pPath->textData);
-            
-            //
-            if (pPath != NULL && strcmp(pPath->textData, "") != 0){
-                execution(token, parameter, pPath);
-            
-            } else {
-                printf("No paths given\n");
-            }
-        }
     }
 
     return 0;
@@ -269,10 +306,10 @@ DONE:
     o exit
     o cd
     o path
+- parallel commands (&) kindof
 
 TODO:
 - redirection (>)
-- parallel commands (&)
 - batch file handling
 
 POSSIBLE CHANGES:
@@ -280,15 +317,10 @@ POSSIBLE CHANGES:
     -use realloc for dynamic list when it grows
     -earlier implementation used it, did change for linked list
 - change if-else structure for switch case
-
+- some places do-while loop would be easier to read
 EXTRA:
 - command history would be cool
     -readline
 
 should i have pipe | ?
-
-
-To parse the input line into constituent pieces, you might want to use strsep()
-another function could be strtok_r, not sure is it better
--strtok is thread safe https://www.geeksforgeeks.org/strtok-strtok_r-functions-c-examples/
 */
