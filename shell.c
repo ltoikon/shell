@@ -86,6 +86,30 @@ int printList(List *pRoot){
     return 0;
 }
 
+List * readFile(List *pRoot, char *filename){
+    FILE *pFile;
+    char *line = NULL;
+    size_t len = 0;
+    __ssize_t read;
+
+    if ((pFile = fopen(filename, "r")) == NULL){
+        fprintf(stderr, "error: cannot open file '%s'\n", filename);
+        exit(1);
+    }
+
+    while ((read = getline(&line, &len, pFile)) != -1 ){
+        char fixedSizeLine[len];
+        strcpy(fixedSizeLine, line);
+
+        //first time when adding a List, the root pointer is NULL, thus pointer need to be returned
+        pRoot = additionList(fixedSizeLine, pRoot);
+        
+    }
+    free(line);
+    fclose(pFile);
+    return pRoot;
+}
+
 
 
 List * initiatePath(List *pPath){
@@ -160,12 +184,17 @@ int execution(char *command, char *parameter, List *pPath){
         while(ptr != NULL){
             fullpath_dynamic 
             = malloc(sizeof(char) * (2+strlen(ptr->textData)+strlen(command)));
+            if(fullpath_dynamic == NULL){
+                perror("Malloc failed");
+            }
+            fullpath_dynamic[0] = '\0'; //initialized as a empty string
             strcat(fullpath_dynamic, ptr->textData);
             strcat(fullpath_dynamic, "/");
             strcat(fullpath_dynamic, command);
-            //printf("TEST command and path is: %s\n", fullpath);
+            //printf("TEST command and path is: %s\n", fullpath_dynamic);
             if (access(fullpath_dynamic, X_OK) == 0){
                 execv(fullpath_dynamic,arguments);
+                exit(0);
             }
             //clear fullpath string for a next path at the list
             //memset(fullpath_dynamic,0,sizeof(fullpath_dynamic)); //static
@@ -213,7 +242,7 @@ int processCommands(List * pPath, List * pCommands){
             pCommands = removeList(pCommands);
             exit(0);
 
-        } else if (strcmp("vaihto", command) == 0){
+        } else if (strcmp("cd", command) == 0){
                 arguments = strtok(arguments, " \t\n"); //remove whitespace
                 changeDirectory(arguments);
                 
@@ -237,19 +266,19 @@ int processCommands(List * pPath, List * pCommands){
 
                 exit(0); //Stopping child process
             }
-            
         } 
         ptr = ptr->pNext;
     }        
-    
+
     /*Wait for child processes before returning
     https://stackoverflow.com/questions/279729/how-to-wait-until-all-child-processes-called-by-fork-complete*/
-    while (wait(NULL) > 0);
+    while (waitpid(-1, NULL, 0) > 0);
+    //while (wait(NULL) > 0);
 
     return 0;
 }
 
-List * parseCommands(char *input, List * pPath, List * pCommands){
+List * parseCommands(char *input, List * pCommands){
     
     
     //List *pCommands = NULL;
@@ -274,30 +303,50 @@ List * parseCommands(char *input, List * pPath, List * pCommands){
     return pCommands;
 }
 
-int main(){
+int main(int argc, char *argv[]){
     char *line = NULL;
+    char* filename = NULL;
     List *pPath = NULL;
     List *pCommands = NULL;
+    List *pBatch = NULL;
+    List *ptr = NULL;
     size_t len = 0;
 
     //initiate path    
     pPath = initiatePath(pPath);
-    //printList(pPath);
+    printList(pPath);
+    if (argc == 2){
+        filename = malloc(sizeof(char)*(strlen(argv[1])+1));
+        strcpy(filename, argv[1]);
+        pBatch = readFile(pBatch, filename);
+        printList(pBatch);
+        ptr = pBatch;
+        while (ptr != NULL){
+            pCommands = parseCommands(ptr->textData, pCommands);
+            processCommands(pPath, pCommands);
+            pCommands = removeList(pCommands); //remove executed commands
+            ptr = ptr->pNext;
+        }
+        pBatch = removeList(pBatch);
+        pPath = removeList(pPath);
 
-    //looping interactive input prompt
-    while (1){
-        printf("shell>>");
-        getline(&line, &len, stdin); //not freed,  does it leak memory?
-        pCommands = parseCommands(line, pPath, pCommands);
-        processCommands(pPath, pCommands);
-        pCommands = removeList(pCommands); //remove executed commands
+    } else {
+        //looping interactive input prompt
+        while (1){
+            printf("shell>>");
+            getline(&line, &len, stdin);
+            pCommands = parseCommands(line, pCommands);
+            processCommands(pPath, pCommands);
+            pCommands = removeList(pCommands); //remove executed commands
 
+        }
     }
-
     return 0;
 }
 
-/*fork() - creates new process, child is copy of the parent
+/* Notes
+
+fork() - creates new process, child is copy of the parent
 exec() -
 wait() -
 
@@ -307,10 +356,10 @@ DONE:
     o cd
     o path
 - parallel commands (&) kindof
+- batch file handling
 
 TODO:
 - redirection (>)
-- batch file handling
 
 POSSIBLE CHANGES:
 - change linked list for dynamic list, does it matter? which one is better?
@@ -321,6 +370,5 @@ POSSIBLE CHANGES:
 EXTRA:
 - command history would be cool
     -readline
-
-should i have pipe | ?
+- should i have pipe | ?
 */
