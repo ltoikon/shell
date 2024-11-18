@@ -1,7 +1,7 @@
 /*Shell*/
 /*Lauri Ikonen*/
 /*Started 23092024*/
-/*Modified 29102024*/
+/*Modified 09112024*/
 
 /**/
 
@@ -10,9 +10,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/wait.h>
+#include <fcntl.h>
 
-/*Linked list data structure is used for saving paths*/
-//Can I use same struct for saving parallel commands
+/*Linked list data structure is used for saving paths and parallel commands*/
 typedef struct List {
     char *textData;
     struct List* pNext;
@@ -67,7 +67,9 @@ List * removeList(List *pRoot){
     //Delete linked list node by node
     while (ptr != NULL){
         pRoot = ptr->pNext;
-        free(ptr->textData);
+        if (ptr->textData != NULL){
+            free(ptr->textData);
+        }
         free(ptr);
         ptr = pRoot;
     }
@@ -110,32 +112,33 @@ List * readFile(List *pRoot, char *filename){
     return pRoot;
 }
 
-
-
 List * initiatePath(List *pPath){
     char *defaultPath = "/bin";
     pPath = additionList(defaultPath, pPath);
 
     return pPath;
-
-
 }
 
 List * updatePath(List *pPath, char *addition){
     char * pArgument = strtok(addition, " ");
   
     // remove old path
+
     pPath = removeList(pPath);
-    
+
+    //create list even if no path is given  
+    if(pArgument == NULL){
+        pPath = additionList("", pPath);
+    }
+
     while(pArgument != NULL){
-        printf("%s\n", pArgument);
+        //printf("%s\n", pArgument);
         pPath = additionList(pArgument, pPath);
         pArgument = strtok(NULL, " ");
     }
-    
-
     return pPath;
 }
+
 int changeDirectory(char * parameter){ 
     //printf("built-in cd\n");
     if (chdir(parameter) != 0){
@@ -149,6 +152,8 @@ int execution(char *command, char *parameter, List *pPath){
     //char fullpath[1000] = {0};
     char *fullpath_dynamic = NULL;
     char *buffer = NULL;
+    char *output = NULL;
+    char *shortenedParameter = parameter;
     //char *buffer_dynamic = NULL;
 
     /*arguments is fixed size and overflow is possible, 
@@ -159,10 +164,24 @@ int execution(char *command, char *parameter, List *pPath){
     int i = 1;
     
     //arguments_dynamic = (char*)malloc(sizeof(char)*len(command));
+
+    
+    //printf("%s", command);
+    
+    
+    
+    //printf("%s", command);
+    
+
     //split arguments
     arguments[0]=command;
     if (parameter != NULL){
-        buffer = strtok(parameter, " ");
+        if ((output = strstr(parameter, ">")) != NULL){
+            
+            //printf("output: %s\nparameter: %s\n", output, parameter);
+            shortenedParameter = strtok(parameter, ">");
+        }
+        buffer = strtok(shortenedParameter, " ");
     }
 
     while (buffer != NULL){
@@ -175,12 +194,42 @@ int execution(char *command, char *parameter, List *pPath){
     pid_t pid = fork(); 
     ptr = pPath;
 
+    //forking failure
     if (pid < 0){
         perror("Fork failed!");
         exit(1);
     }
 
-    if (pid == 0){
+    //successful fork
+    if (pid == 0){ 
+        
+        //redirect shell output
+
+        if(output != NULL){
+            char *outputShort;
+            int fd;
+            outputShort = output + 1;
+            
+            /*while(strcmp(outputShort[0]," \t\n") != NULL){
+                outputShort++;
+            }*/
+            while(outputShort[0] == ' ' || outputShort[0] == '\t' || outputShort[0] == '\n'){
+                outputShort++;
+            }
+            
+            printf("filename %s\n", outputShort);
+            if ((fd = open(outputShort, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)) == -1){
+                perror("File open error on redirection");
+                exit(1);
+            }
+            //TODO: Error checking
+            //changes output to opened file
+            dup2(fd, 1);
+
+            close(fd);
+
+        }
+
         while(ptr != NULL){
             fullpath_dynamic 
             = malloc(sizeof(char) * (2+strlen(ptr->textData)+strlen(command)));
@@ -216,7 +265,6 @@ int execution(char *command, char *parameter, List *pPath){
     return 0;
 }
 
-
 int processCommands(List * pPath, List * pCommands){
 
     char *command;
@@ -228,10 +276,10 @@ int processCommands(List * pPath, List * pCommands){
     //Splitting parameters is done inside each execute function
 
     while (ptr != NULL){
-
+        /*    
         fprintf(stdout, "Executing: ");
         fprintf(stdout, "%s\n", ptr->textData);
-
+        */
         command = strtok(ptr->textData, " ");
         arguments = strtok(NULL, "\n");
 
@@ -243,12 +291,12 @@ int processCommands(List * pPath, List * pCommands){
             exit(0);
 
         } else if (strcmp("cd", command) == 0){
-                arguments = strtok(arguments, " \t\n"); //remove whitespace
-                changeDirectory(arguments);
+            arguments = strtok(arguments, " \t\n"); //remove whitespace
+            changeDirectory(arguments);
                 
         } else if (strcmp("path", command) == 0){
-                    pPath = updatePath(pPath, arguments);
-                    printList(pPath);
+            pPath = updatePath(pPath, arguments);
+            printList(pPath);
         
         /*Other commands*/            
         } else {
@@ -279,8 +327,6 @@ int processCommands(List * pPath, List * pCommands){
 }
 
 List * parseCommands(char *input, List * pCommands){
-    
-    
     //List *pCommands = NULL;
     char *command = NULL;
 
@@ -312,6 +358,9 @@ int main(int argc, char *argv[]){
     List *ptr = NULL;
     size_t len = 0;
 
+        char error_message[30] = "An error has occurred\n";
+
+    write(STDERR_FILENO, error_message, strlen(error_message)); 
     //initiate path    
     pPath = initiatePath(pPath);
     printList(pPath);
@@ -333,7 +382,7 @@ int main(int argc, char *argv[]){
     } else {
         //looping interactive input prompt
         while (1){
-            printf("shell>>");
+            printf("wish>>");
             getline(&line, &len, stdin);
             pCommands = parseCommands(line, pCommands);
             processCommands(pPath, pCommands);
@@ -357,9 +406,10 @@ DONE:
     o path
 - parallel commands (&) kindof
 - batch file handling
+- redirection (>)
 
 TODO:
-- redirection (>)
+- error check
 
 POSSIBLE CHANGES:
 - change linked list for dynamic list, does it matter? which one is better?
